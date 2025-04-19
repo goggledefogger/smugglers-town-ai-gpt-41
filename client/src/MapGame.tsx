@@ -42,6 +42,12 @@ export default function MapGame() {
 
   useEffect(() => {
     let destroyed = false;
+    // Define shared state and cleanup variables at the top of useEffect
+    // @ts-expect-error: Index signature for carSprites is any
+    const carSprites: { [sessionId: string]: PIXI.Graphics } = {};
+    // @ts-expect-error: Index signature for carSpriteStates is any
+    const carSpriteStates: { [sessionId: string]: any } = {};
+    let roomCleanup: (() => void) | null = null;
     // --- MapLibre Init ---
     const map = new maplibregl.Map({
       container: "map",
@@ -238,18 +244,93 @@ export default function MapGame() {
 
     // --- Colyseus Client Init ---
     const client = new Client("ws://localhost:2567");
-    client.joinOrCreate("arena").then(room => {
-      console.log("[Colyseus] Connected to room:", room.sessionId);
-      console.log("[Colyseus] Room state:", room.state);
-      console.log("[Colyseus] Cars state:", room.state.cars);
-      // Listen for car state changes
-      room.state.cars.onAdd((car, sessionId) => {
-        console.log(`[Colyseus] Car added: ${sessionId} ${sessionId === room.sessionId ? '(local)' : ''}`);
-        // ... create or update your car sprite here ...
-      });
-      room.state.cars.onRemove((car, sessionId) => {
-        // ... remove the car sprite ...
-      });
+    const singletonRoomId = "main";
+    async function joinSingletonRoom() {
+      return await client.joinOrCreate("arena", { roomId: singletonRoomId });
+    }
+    joinSingletonRoom().then(room => {
+      console.log("[Colyseus] Connected to room:", room.roomId, room.sessionId);
+      // Listen for car state changes (register only once)
+      const onAdd = (car: any, sessionId: string) => {
+        if (carSprites[sessionId]) return; // Don't create twice
+        const isLocal = sessionId === room.sessionId;
+        console.log(`[Colyseus] Car added: ${sessionId}${isLocal ? ' (local)' : ' (remote)'}`);
+        const sprite = new PIXI.Graphics();
+        // Draw car body (rectangle with pointed front)
+        const CAR_WIDTH = CAR_SIZE * 0.6;
+        const CAR_LENGTH = CAR_SIZE * 1.2;
+        const bodyLeft = -CAR_WIDTH / 2;
+        const bodyRight = CAR_WIDTH / 2;
+        const bodyBack = CAR_LENGTH / 2;
+        const bodyFront = -CAR_LENGTH / 2 + CAR_WIDTH * 0.4;
+        const tipY = -CAR_LENGTH / 2;
+        sprite.rect(bodyLeft, bodyFront, CAR_WIDTH, CAR_LENGTH * 0.7)
+          .fill(isLocal ? 0x00ff00 : 0xFF3333)
+          .stroke({ width: 4, color: 0x000000 });
+        sprite.moveTo(bodyLeft, bodyFront)
+          .lineTo(0, tipY)
+          .lineTo(bodyRight, bodyFront)
+          .lineTo(bodyLeft, bodyFront)
+          .fill(isLocal ? 0x00ff00 : 0xFF3333)
+          .stroke({ width: 4, color: 0x000000 });
+        sprite.moveTo(bodyLeft, 0)
+          .lineTo(bodyRight, 0)
+          .moveTo(0, bodyFront)
+          .lineTo(0, bodyBack)
+          .stroke({ width: 2, color: 0xffffff });
+        sprite.zIndex = 1000;
+        sprite.alpha = 1;
+        carSprites[sessionId] = sprite;
+        if (pixiAppRef.current) pixiAppRef.current.stage.addChild(sprite);
+        // Update sprite position/rotation on every change
+        carSpriteStates[sessionId] = {
+          prev: { x: car.x, y: car.y, heading: car.heading, timestamp: Date.now() },
+          curr: { x: car.x, y: car.y, heading: car.heading, timestamp: Date.now() }
+        };
+        car.onChange(() => {
+          const state = carSpriteStates[sessionId];
+          if (state) {
+            state.prev = { ...state.curr };
+            state.curr = { x: car.x, y: car.y, heading: car.heading, timestamp: Date.now() };
+          }
+        });
+      };
+      const onRemove = (car: any, sessionId: string) => {
+        const sprite = carSprites[sessionId];
+        if (sprite && pixiAppRef.current) pixiAppRef.current.stage.removeChild(sprite);
+        delete carSprites[sessionId];
+        delete carSpriteStates[sessionId];
+        console.log(`[Colyseus] Car removed: ${sessionId}`);
+      };
+      (room.state as any).cars.onAdd(onAdd);
+      (room.state as any).cars.onRemove(onRemove);
+      // Send local car state to server every frame
+      let running = true;
+      function sendInput() {
+        if (!running) return;
+        if (room && room.sessionId && carState.current) {
+          room.send("input", {
+            x: carState.current.x,
+            y: carState.current.y,
+            heading: carState.current.heading,
+          });
+        }
+        requestAnimationFrame(sendInput);
+      }
+      sendInput();
+      // Cleanup function for this room
+      roomCleanup = () => {
+        running = false;
+        Object.keys(carSprites).forEach(sessionId => {
+          const sprite = carSprites[sessionId];
+          if (sprite && pixiAppRef.current) pixiAppRef.current.stage.removeChild(sprite);
+          delete carSprites[sessionId];
+          delete carSpriteStates[sessionId];
+          console.log(`[Colyseus] Car sprite cleaned up: ${sessionId}`);
+        });
+        // Remove listeners if needed (Colyseus MapSchema listeners are not persistent after room leave)
+        console.log('[Colyseus] Room cleanup complete');
+      };
     });
 
     // --- Cleanup ---
@@ -270,6 +351,7 @@ export default function MapGame() {
         }
       }
       map.remove();
+      if (roomCleanup) roomCleanup();
     };
   }, []);
 

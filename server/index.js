@@ -32,12 +32,15 @@ type({ map: CarState })(State.prototype, "cars");
 // --- Colyseus Room ---
 const { Room } = require("colyseus");
 class CarRoom extends Room {
-  onCreate() {
+  onCreate(options) {
+    if (options && options.roomId) {
+      this.roomId = options.roomId;
+    }
     this.setState(new State());
+    console.log(`[Colyseus] Room created: ${this.roomId}`);
     this.onMessage("input", (client, data) => {
       const car = this.state.cars[client.sessionId];
       if (!car) return;
-      // Update car state from input
       car.x = data.x;
       car.y = data.y;
       car.heading = data.heading;
@@ -47,13 +50,18 @@ class CarRoom extends Room {
     const car = new CarState();
     car.id = client.sessionId;
     this.state.cars[client.sessionId] = car;
+    console.log(`[Colyseus] Client joined: ${client.sessionId} in room ${this.roomId}`);
   }
   onLeave(client) {
     delete this.state.cars[client.sessionId];
+    console.log(`[Colyseus] Client left: ${client.sessionId} in room ${this.roomId}`);
+  }
+  onDispose() {
+    console.log(`[Colyseus] Room disposed: ${this.roomId}`);
   }
 }
 
-gameServer.define("arena", CarRoom);
+gameServer.define("arena", CarRoom).filterBy(['roomId']);
 
 server.listen(port, () => {
   console.log(`Colyseus server listening on ws://localhost:${port}`);
