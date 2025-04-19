@@ -4,12 +4,12 @@ import maplibregl from "maplibre-gl";
 import * as PIXI from "pixi.js";
 
 const MAP_STYLE = "https://demotiles.maplibre.org/style.json";
-const MAP_START = { lng: -74.006, lat: 40.7128, zoom: 15 }; // New York City, zoomed in
+const MAP_START = { lng: -74.006, lat: 40.7128, zoom: 12 }; // New York City, wider view
 const CAR_SIZE = 32;
-const ACCEL = 12; // m/s^2
-const MAX_SPEED = 14; // m/s
+const ACCEL = 1000; // m/s^2 (exaggerated for debug)
+const MAX_SPEED = 2000; // m/s (exaggerated for debug)
 const TURN_RATE = 180; // deg/s
-const DRAG = 0.9;
+const DRAG = 1.5;
 
 // Add driving mode toggle
 const DRIVING_MODES = ["car-fixed", "car-rotates"] as const;
@@ -85,20 +85,58 @@ export default function MapGame() {
         canvasParent.replaceChild(canvas, oldDiv);
       }
 
-      // Car sprite (rectangle, highly visible)
+      // Car sprite (rectangle with pointed front)
+      const CAR_WIDTH = CAR_SIZE * 0.6;
+      const CAR_LENGTH = CAR_SIZE * 1.2;
+      const bodyLeft = -CAR_WIDTH / 2;
+      const bodyRight = CAR_WIDTH / 2;
+      const bodyBack = CAR_LENGTH / 2;
+      const bodyFront = -CAR_LENGTH / 2 + CAR_WIDTH * 0.4;
+      const tipY = -CAR_LENGTH / 2;
       car = new PIXI.Graphics();
-      car.rect(-CAR_SIZE / 2, -CAR_SIZE / 2, CAR_SIZE, CAR_SIZE)
+      // Draw car body (rectangle)
+      car.rect(bodyLeft, bodyFront, CAR_WIDTH, CAR_LENGTH * 0.7)
          .fill(0xFF3333)
-         .stroke({ width: 4, color: 0x000000 }); // bright red with thick black border
+         .stroke({ width: 4, color: 0x000000 });
+      // Draw pointed front (triangle)
+      car.moveTo(bodyLeft, bodyFront)
+         .lineTo(0, tipY)
+         .lineTo(bodyRight, bodyFront)
+         .lineTo(bodyLeft, bodyFront)
+         .fill(0xFF3333)
+         .stroke({ width: 4, color: 0x000000 });
       // Add a white crosshair for visibility
-      car.moveTo(-CAR_SIZE / 2, 0)
-         .lineTo(CAR_SIZE / 2, 0)
-         .moveTo(0, -CAR_SIZE / 2)
-         .lineTo(0, CAR_SIZE / 2)
-         .stroke({ width: 2, color: 0xffffff }); // white crosshair
+      car.moveTo(bodyLeft, 0)
+         .lineTo(bodyRight, 0)
+         .moveTo(0, bodyFront)
+         .lineTo(0, bodyBack)
+         .stroke({ width: 2, color: 0xffffff });
+      // Add a debug arrow showing heading (from center to just beyond tip)
+      car.moveTo(0, 0)
+         .lineTo(0, tipY - CAR_SIZE * 0.3)
+         .stroke({ width: 2, color: 0x00ff00 }); // green arrow
       car.zIndex = 1000;
       car.alpha = 1;
       pixiApp.stage.addChild(car);
+
+      // Add debug label overlay to the DOM
+      const debugLabelId = 'car-debug-label';
+      let debugLabel = document.getElementById(debugLabelId);
+      if (!debugLabel) {
+        debugLabel = document.createElement('div');
+        debugLabel.id = debugLabelId;
+        debugLabel.style.position = 'absolute';
+        debugLabel.style.top = '12px';
+        debugLabel.style.right = '12px';
+        debugLabel.style.zIndex = '10000';
+        debugLabel.style.background = 'rgba(0,0,0,0.7)';
+        debugLabel.style.color = '#0f0';
+        debugLabel.style.fontFamily = 'monospace';
+        debugLabel.style.fontSize = '16px';
+        debugLabel.style.padding = '6px 12px';
+        debugLabel.style.borderRadius = '8px';
+        document.body.appendChild(debugLabel);
+      }
 
       // --- Animation Loop ---
       let last = performance.now();
@@ -119,32 +157,50 @@ export default function MapGame() {
         const acc = state.throttle * ACCEL - state.brake * ACCEL * 0.7;
         state.speed += acc * dt;
         // Drag
-        state.speed *= 1 - DRAG * dt;
+        state.speed -= state.speed * DRAG * dt;
+        // Clamp speed to zero if very small
+        if (Math.abs(state.speed) < 0.1) state.speed = 0;
         // Clamp speed
         state.speed = Math.max(Math.min(state.speed, MAX_SPEED), -MAX_SPEED / 2);
         // Move
-        state.x += Math.cos(degToRad(state.heading)) * state.speed * dt;
-        state.y += Math.sin(degToRad(state.heading)) * state.speed * dt;
+        // Movement (exaggerate speed for testing, if needed)
+        const speed = state.speed * 10; // exaggerate here if you want
+        let tempX = 0, tempY = 0;
+        if (drivingMode.current === "car-fixed") {
+          // Move in the direction of screen up, rotated by the map's bearing
+          const bearingRad = degToRad(-state.heading + 180);
+          tempX = Math.sin(bearingRad) * speed * dt;
+          tempY = Math.cos(bearingRad) * speed * dt;
+        } else {
+          tempX = Math.sin(degToRad(state.heading)) * speed * dt;
+          tempY = Math.cos(degToRad(state.heading)) * speed * dt;
+        }
+        state.x += tempX;
+        state.y += tempY;
         // --- Map panning and rotation ---
         const metersPerDegLat = 111320;
         const metersPerDegLng = metersPerDegLat * Math.cos((MAP_START.lat * Math.PI) / 180);
         const lat = MAP_START.lat + state.y / metersPerDegLat;
         const lng = MAP_START.lng + state.x / metersPerDegLng;
         if (drivingMode.current === "car-fixed") {
-          map.setCenter([lng, lat]);
-          map.setBearing(-state.heading); // rotate map so car always faces up
+          // Map bearing should be -state.heading + 180 so car always points up
+          map.jumpTo({ center: [lng, lat], bearing: -state.heading + 180 });
           car.x = window.innerWidth / 2;
           car.y = window.innerHeight / 2;
           car.rotation = 0; // car always upright
         } else {
-          map.setCenter([lng, lat]);
-          map.setBearing(0); // map north is up
+          map.jumpTo({ center: [lng, lat], bearing: 0 });
           car.x = window.innerWidth / 2;
           car.y = window.innerHeight / 2;
           car.rotation = degToRad(state.heading); // car rotates
         }
         // Next frame
         animationRef.current = requestAnimationFrame(animate);
+
+        // Update debug label
+        if (debugLabel) {
+          debugLabel.textContent = `Heading: ${state.heading.toFixed(1)}°  |  Map bearing: ${drivingMode.current === "car-fixed" ? (-state.heading).toFixed(1) : '0.0'}°`;
+        }
       }
       animationRef.current = requestAnimationFrame(animate);
     })();

@@ -42,6 +42,7 @@ This project uses the latest stable versions of all core dependencies. See below
 ## Completed Tasks
 - [x] Documented dependency versions and upgrade notes
 - [x] Integrate map rendering and game canvas (MapLibre + PixiJS v8, car and crosshair visible, correct API)
+- [x] Fix car movement and map panning/rotation logic so that in both car-fixed and car-rotates modes, the car moves and the map pans/rotates as expected (screen/world alignment, PixiJS v8 rendering, and user controls all correct)
 
 ## In Progress Tasks
 - [ ] Set up project with above dependencies and verify compatibility
