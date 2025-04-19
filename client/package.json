@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.74.4",
     "autoprefixer": "^10.4.21",
+    "colyseus.js": "^0.15.28",
     "maplibre-gl": "^5.3.1",
     "pixi.js": "^8.9.1",
     "postcss": "^8.5.3",

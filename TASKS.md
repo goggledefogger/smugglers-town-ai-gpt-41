@@ -43,10 +43,10 @@ This project uses the latest stable versions of all core dependencies. See below
 - [x] Documented dependency versions and upgrade notes
 - [x] Integrate map rendering and game canvas (MapLibre + PixiJS v8, car and crosshair visible, correct API)
 - [x] Fix car movement and map panning/rotation logic so that in both car-fixed and car-rotates modes, the car moves and the map pans/rotates as expected (screen/world alignment, PixiJS v8 rendering, and user controls all correct)
+- [x] Set up project with above dependencies and verify compatibility (Colyseus multiplayer connection and state sync logging working)
 
 ## In Progress Tasks
-- [ ] Set up project with above dependencies and verify compatibility
-- [ ] Implement MVP gameplay loop and networking
+- [ ] Implement MVP gameplay loop and networking (next: render all cars from server state for all clients)
 - [ ] Set up CI/CD pipeline (GitHub Actions, Cloud Run)
 - [ ] Refactor map/game logic into modular components after MVP is working (see @task-list.mdc for best practices; initial implementation will use a single MapGame.tsx for rapid prototyping)
 

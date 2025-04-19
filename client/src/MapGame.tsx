@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import maplibregl from "maplibre-gl";
 import * as PIXI from "pixi.js";
+import { Client } from "colyseus.js";
 
 const MAP_STYLE = "https://demotiles.maplibre.org/style.json";
 const MAP_START = { lng: -74.006, lat: 40.7128, zoom: 12 }; // New York City, wider view
@@ -234,6 +235,22 @@ export default function MapGame() {
       }
     };
     window.addEventListener("resize", handleResize);
+
+    // --- Colyseus Client Init ---
+    const client = new Client("ws://localhost:2567");
+    client.joinOrCreate("arena").then(room => {
+      console.log("[Colyseus] Connected to room:", room.sessionId);
+      console.log("[Colyseus] Room state:", room.state);
+      console.log("[Colyseus] Cars state:", room.state.cars);
+      // Listen for car state changes
+      room.state.cars.onAdd((car, sessionId) => {
+        console.log(`[Colyseus] Car added: ${sessionId} ${sessionId === room.sessionId ? '(local)' : ''}`);
+        // ... create or update your car sprite here ...
+      });
+      room.state.cars.onRemove((car, sessionId) => {
+        // ... remove the car sprite ...
+      });
+    });
 
     // --- Cleanup ---
     return () => {
