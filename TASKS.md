@@ -44,9 +44,10 @@ This project uses the latest stable versions of all core dependencies. See below
 - [x] Integrate map rendering and game canvas (MapLibre + PixiJS v8, car and crosshair visible, correct API)
 - [x] Fix car movement and map panning/rotation logic so that in both car-fixed and car-rotates modes, the car moves and the map pans/rotates as expected (screen/world alignment, PixiJS v8 rendering, and user controls all correct)
 - [x] Set up project with above dependencies and verify compatibility (Colyseus multiplayer connection and state sync logging working)
+- [x] All clients join the same singleton Colyseus room and see each other's cars in real time (robust joinOrCreate, filterBy, and roomId logic, with proper cleanup and no duplicate cars)
 
 ## In Progress Tasks
-- [ ] Implement MVP gameplay loop and networking (next: render all cars from server state for all clients)
+- [ ] Implement MVP gameplay loop and networking (next: gameplay logic, scoring, and further networking polish)
 - [ ] Set up CI/CD pipeline (GitHub Actions, Cloud Run)
 - [ ] Refactor map/game logic into modular components after MVP is working (see @task-list.mdc for best practices; initial implementation will use a single MapGame.tsx for rapid prototyping)
 
@@ -63,6 +64,7 @@ This project uses the latest stable versions of all core dependencies. See below
 - Keep dependencies up to date with `npm outdated` and Dependabot.
 - Document any breaking changes or upgrade steps in this file.
 - **PixiJS v8 migration:** Use `.stroke({ ... })` and `.fill({ ... })` instead of deprecated `.lineStyle()` and `.beginFill()` APIs. See MapGame.tsx for correct usage. Car and crosshair are now visible and styled as intended.
+- **Multiplayer car rendering and singleton room logic is now robust and tested. All clients see each other's cars in real time.**
 
 ### Relevant Files
 - `package.json` – Dependency versions
